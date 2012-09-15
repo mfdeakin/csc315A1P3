@@ -19,6 +19,8 @@
 #define SQRT2 1.4142135623730951
 #define SQRTHALF 0.7071067811865476
 
+bool circleDefined = false;
+
 struct pt {
 	GLint x;
 	GLint y;
@@ -64,9 +66,6 @@ void display(void)
 	glClear(GL_COLOR_BUFFER_BIT);
 	drawView();
 	glColor3f(1.0f, 0.0f, 0.0f);
-	glBegin(GL_POINTS);
-	glVertex2i(circle.x, circle.y);
-	glEnd();
 	drawCircle();
 	glFlush();
  	glutSwapBuffers();
@@ -93,7 +92,18 @@ float inCircle(float x, float y, float rad)
 
 void calcCircle(float radius)
 {
-	float numPoints = radius * SQRT2 * 4;
+	/* The number of points required is
+	 * calculated with a right triangle.
+	 * From the center to any of the diagonal
+	 * points which are pi/4 of an arc away from
+	 * a horizontal or vertical point,
+	 * the x and y values are sqrt(2)/2 * r
+	 * from the center.
+	 * Since x always increments,
+	 * this gives us a good approximation of
+	 * the number of points needed to be filled.
+	 * For safety, add a MAGIC NUMBER of extra points */
+	float numPoints = radius * SQRT2 * 4 + 4;
 	if(!(int)numPoints)
 		return;
 	if(circle.points) {
@@ -114,37 +124,46 @@ void calcCircle(float radius)
 				 qArc,
 				 hArc,
 				 fArc);
-	glBegin(GL_POINTS);
 	int i = 0;
 	float curx = 0, cury = radius;
 	struct pt next;
+	/* Calculate the circle points */
 	while(i <= qArc / 2) {
+		/* Start with the top right of the circle */
 		next.x = curx;
 		next.y = cury;
 		circle.points[i] = next;
+		/* The top left of the circle */
 		next.x = -curx;
 		next.y = cury;
 		circle.points[fArc - i] = next;
+		/* The bottom right */
 		next.x = curx;
 		next.y = -cury;
 		circle.points[hArc - i] = next;
+		/* The bottom left */
 		next.x = -curx;
 		next.y = -cury;
 		circle.points[hArc + i] = next;
 
+		/* The right top */
 		next.x = cury;
 		next.y = curx;
 		circle.points[qArc + i] = next;
+		/* The left top */
 		next.x = -cury;
 		next.y = curx;
 		circle.points[qArc - i] = next;
+		/* The right bottom */
 		next.x = cury;
 		next.y = -curx;
 		circle.points[hArc + qArc + i] = next;
+		/* The left bottom */
 		next.x = -cury;
 		next.y = -curx;
 		circle.points[hArc + qArc - i] = next;
 
+		/* Calculate the coordinates used for the next part of the circle */
 		float old = inCircle(curx++, cury - 0.5, radius);
 		if(old >= 1) {
 			cury--;
@@ -154,42 +173,22 @@ void calcCircle(float radius)
 		}
 		i++;
 	}
-	printf("Number of points: %d vs %d\n", i - 1, (int)ceil(numPoints / 8));
-	glEnd();
 }
 
 void drawCircle()
 {
 	if(circle.points) {
-		glColor3f(0.0f, 0.0f, 1.0f);
 		glBegin(GL_POINTS);
+		/* Draw the center of the circle */
+		glColor3f(1.0f, 0.0f, 0.0f);
+		glVertex2i(circle.x, circle.y);
+		/* Draw the circle itself */
+		glColor3f(0.0f, 0.0f, 1.0f);
 		int i;
 		for(i = 0; i < circle.count; i++) {
-			if(circle.points[i].x == 0 &&
-				 circle.points[i].y == 0) {
-				printf("Point not set: %d\n", i);
-				if(i == 0)
-					printf("  Previous: x: %d\n"
-								 "            y: %d\n",
-								 circle.points[circle.count - 1].x,
-								 circle.points[circle.count - 1].y);
-				else
-					printf("  Previous: x: %d\n"
-								 "            y: %d\n",
-								 circle.points[i - 1].x,
-								 circle.points[i - 1].y);
-				if(i == circle.count - 1)
-					printf("  Next: x: %d\n"
-								 "        y: %d\n",
-								 circle.points[0].x,
-								 circle.points[0].y);
-				else
-					printf("  Next: x: %d\n"
-								 "        y: %d\n",
-								 circle.points[i - 1].x,
-								 circle.points[i - 1].y);
-					
-			}
+			/* We need to clip the circle's line,
+			 * but we don't want to modify the circle
+			 * itself. */
 			struct pt tmp[2];
 			tmp[0] = circle.points[i];
 			if(i + 1 < circle.count)
@@ -206,7 +205,6 @@ void drawCircle()
 			}
 		}
 		glEnd();
-		puts("");
 	}
 }
 
@@ -277,16 +275,34 @@ int interpolateY(struct pt p1, struct pt p2, int newY)
 void mpress(int btn, int state, int x, int y)
 {
 	y = wnddim.y - y;
-	if(btn == GLUT_LEFT_BUTTON) {
-		circle.x = x;
-		circle.y = y;
+	if(x < OFFWIDTH || x > OFFWIDTH + VIEWWIDTH ||
+		 y < OFFHEIGHT || y > OFFHEIGHT + VIEWHEIGHT)	{
+		printf("Error:\n\tx: %d\n\ty: %d\n", x, y);
 	}
-	else if(btn == GLUT_RIGHT_BUTTON) {
-		float tmpx = x - circle.x,
-			tmpy = y - circle.y;
-		float radius = sqrt(tmpx * tmpx + tmpy * tmpy);
-		calcCircle(radius);
-		glutPostRedisplay();
+	else {
+		if(btn == GLUT_LEFT_BUTTON) {
+			circle.x = x;
+			circle.y = y;
+			circleDefined = true;
+		}
+		else if(btn == GLUT_RIGHT_BUTTON) {
+			if(circleDefined) {
+				float tmpx = x - circle.x,
+					tmpy = y - circle.y;
+				float radius = sqrt(tmpx * tmpx + tmpy * tmpy);
+				calcCircle(radius);
+				glutPostRedisplay();
+				circleDefined = false;
+			}
+			else {
+				if(circle.points) {
+					free(circle.points);
+					circle.points = NULL;
+					circle.count = 0;
+				}
+				glutPostRedisplay();
+			}
+		}
 	}
 }
 
@@ -316,9 +332,9 @@ void resize(GLsizei width, GLsizei height)
 
 void keypress(unsigned char key, int x, int y)
 {
+	key = tolower(key);
 	switch(key) {
 	case 'q':
-	case 'Q':
 		exit(0);
 	}
 }
