@@ -103,7 +103,7 @@ void calcCircle(float radius)
 	 * this gives us a good approximation of
 	 * the number of points needed to be filled.
 	 * For safety, add a MAGIC NUMBER of extra points */
-	float numPoints = radius * SQRT2 * 4 + 4;
+	float numPoints = radius * SQRT2 * 4 + 10;
 	if(!(int)numPoints)
 		return;
 	if(circle.points) {
@@ -149,15 +149,15 @@ void calcCircle(float radius)
 		/* The right top */
 		next.x = cury;
 		next.y = curx;
-		circle.points[qArc + i] = next;
+		circle.points[qArc - i] = next;
 		/* The left top */
 		next.x = -cury;
 		next.y = curx;
-		circle.points[qArc - i] = next;
+		circle.points[hArc + qArc + i] = next;
 		/* The right bottom */
 		next.x = cury;
 		next.y = -curx;
-		circle.points[hArc + qArc + i] = next;
+		circle.points[qArc + i] = next;
 		/* The left bottom */
 		next.x = -cury;
 		next.y = -curx;
@@ -280,12 +280,12 @@ void mpress(int btn, int state, int x, int y)
 		printf("Error:\n\tx: %d\n\ty: %d\n", x, y);
 	}
 	else {
-		if(btn == GLUT_LEFT_BUTTON) {
+		if(btn == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
 			circle.x = x;
 			circle.y = y;
 			circleDefined = true;
 		}
-		else if(btn == GLUT_RIGHT_BUTTON) {
+		else if(btn == GLUT_RIGHT_BUTTON && state == GLUT_DOWN) {
 			if(circleDefined) {
 				float tmpx = x - circle.x,
 					tmpy = y - circle.y;
